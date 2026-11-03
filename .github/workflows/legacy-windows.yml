@@ -1,0 +1,56 @@
+name: Legacy Windows build
+on:
+  push:
+    branches: [legacy-low-spec]
+  pull_request:
+    branches: [main]
+    paths:
+      - "crates/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/legacy-windows.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: legacy-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-x64:
+    name: Windows x64 compile (baseline)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: legacy-windows-x64
+
+      - name: Build Horizon client
+        run: cargo build --locked --release -p horizon-client --bin horizon-client
+
+      - name: Verify executable exists
+        shell: pwsh
+        run: |
+          $exe = "target/release/horizon-client.exe"
+          if (!(Test-Path $exe)) {
+            throw "Build did not produce $exe"
+          }
+          Get-Item $exe | Format-List Name,Length,LastWriteTime
+
+      - name: Upload Windows executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: horizon-windows-x64-baseline
+          path: target/release/horizon-client.exe
+          if-no-files-found: error
+          retention-days: 7
