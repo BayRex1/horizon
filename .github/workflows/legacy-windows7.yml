@@ -1,0 +1,55 @@
+name: Legacy Windows 7 x64 build
+
+on:
+  push:
+    branches: [legacy-windows7]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: legacy-windows7-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows7-x64:
+    name: Build Windows 7 x64 compatibility test
+    runs-on: windows-2022
+    timeout-minutes: 90
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install Rust 1.85 (workspace minimum)
+        uses: dtolnay/rust-toolchain@1.85.0
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: legacy-windows7-x64
+
+      - name: Build Horizon client
+        run: cargo build --locked --release -p horizon-client --bin horizon-client
+
+      - name: Assemble experimental package
+        shell: pwsh
+        run: |
+          $package = "target/legacy-windows7-package"
+          New-Item -ItemType Directory -Force -Path $package | Out-Null
+          $exe = "target/release/horizon-client.exe"
+          if (!(Test-Path $exe)) {
+            throw "Build did not produce $exe"
+          }
+          Copy-Item $exe "$package/horizon-client.exe"
+          Copy-Item "legacy-windows7/Start-Windows7-OpenGL.bat" $package
+          Copy-Item "legacy-windows7/README.md" $package
+          Get-ChildItem $package | Format-Table Name,Length
+
+      - name: Upload experimental Windows 7 package
+        uses: actions/upload-artifact@v4
+        with:
+          name: horizon-legacy-windows7-x64
+          path: target/legacy-windows7-package/*
+          if-no-files-found: error
+          retention-days: 7
