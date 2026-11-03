@@ -8,6 +8,7 @@ on:
       - "crates/**"
       - "Cargo.toml"
       - "Cargo.lock"
+      - "legacy/**"
       - ".github/workflows/legacy-windows.yml"
   workflow_dispatch:
 
@@ -20,7 +21,7 @@ concurrency:
 
 jobs:
   windows-x64:
-    name: Windows x64 compile (baseline)
+    name: Windows x64 Legacy package
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
@@ -38,19 +39,24 @@ jobs:
       - name: Build Horizon client
         run: cargo build --locked --release -p horizon-client --bin horizon-client
 
-      - name: Verify executable exists
+      - name: Assemble portable Legacy package
         shell: pwsh
         run: |
+          $package = "target/legacy-package"
+          New-Item -ItemType Directory -Force -Path $package | Out-Null
           $exe = "target/release/horizon-client.exe"
           if (!(Test-Path $exe)) {
             throw "Build did not produce $exe"
           }
-          Get-Item $exe | Format-List Name,Length,LastWriteTime
+          Copy-Item $exe "$package/horizon-client.exe"
+          Copy-Item "legacy/Start-Legacy-OpenGL.bat" $package
+          Copy-Item "legacy/README.md" $package
+          Get-ChildItem $package | Format-Table Name,Length
 
-      - name: Upload Windows executable
+      - name: Upload Windows Legacy package
         uses: actions/upload-artifact@v4
         with:
-          name: horizon-windows-x64-baseline
-          path: target/release/horizon-client.exe
+          name: horizon-legacy-windows-x64
+          path: target/legacy-package/*
           if-no-files-found: error
           retention-days: 7
