@@ -21,9 +21,6 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
-      # The ordinary *-pc-windows-msvc Rust target requires Windows 10.
-      # The dedicated win7 target supplies compatibility shims for APIs such
-      # as GetSystemTimePreciseAsFileTime, which is absent on Windows 7.
       - name: Install nightly Rust and Rust sources
         uses: dtolnay/rust-toolchain@nightly
         with:
@@ -34,18 +31,32 @@ jobs:
         with:
           shared-key: legacy-windows7-x64-win7-target
 
-      - name: Verify Windows 7 target is known
-        run: rustc --print target-list | findstr /x x86_64-win7-windows-msvc
+      # Rust keeps the Win7 target as Tier 3 and does not publish it in
+      # rustc --print target-list. Build a custom target spec based on the
+      # official x86_64 MSVC ABI, changing only the vendor to "win7".
+      # Rust std uses target_vendor="win7" to select Win7 API fallbacks.
+      - name: Create Windows 7 target specification
+        shell: pwsh
+        run: |
+          rustc -Z unstable-options --print target-spec-json --target x86_64-pc-windows-msvc |
+            Out-File -Encoding utf8 target-win7.json
+          $spec = Get-Content target-win7.json -Raw
+          if ($spec -notmatch '"vendor"\s*:\s*"pc"') {
+            throw "Unexpected MSVC target specification; vendor field was not pc."
+          }
+          $spec = $spec -replace '"vendor"\s*:\s*"pc"', '"vendor": "win7"'
+          Set-Content -Encoding utf8 target-win7.json $spec
+          Get-Content target-win7.json
 
       - name: Build Horizon client for Windows 7
-        run: cargo build --locked -Z build-std=std,panic_unwind --target x86_64-win7-windows-msvc --release -p horizon-client --bin horizon-client
+        run: cargo build --locked -Z build-std=std,panic_unwind --target target-win7.json --release -p horizon-client --bin horizon-client
 
       - name: Assemble experimental package
         shell: pwsh
         run: |
           $package = "target/legacy-windows7-package"
           New-Item -ItemType Directory -Force -Path $package | Out-Null
-          $exe = "target/x86_64-win7-windows-msvc/release/horizon-client.exe"
+          $exe = "target/target-win7/release/horizon-client.exe"
           if (!(Test-Path $exe)) {
             throw "Build did not produce $exe"
           }
