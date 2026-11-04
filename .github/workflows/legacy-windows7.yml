@@ -51,7 +51,7 @@ jobs:
           Get-Content target-win7.json
 
       - name: Build Horizon client for Windows 7
-        run: cargo build --locked -Z json-target-spec -Z build-std=std,panic_unwind --target target-win7.json --release -p horizon-client --bin horizon-client
+        run: cargo build --locked --no-default-features -Z json-target-spec -Z build-std=std,panic_unwind --target target-win7.json --release -p horizon-client --bin horizon-client
 
       - name: Assemble experimental package
         shell: pwsh
