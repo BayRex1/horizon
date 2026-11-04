@@ -36,7 +36,6 @@ jobs:
         with:
           shared-key: legacy-windows7-x64-win7-target
 
-      # Build a custom Win7 target using the MSVC ABI and Win7 std fallbacks.
       - name: Create Windows 7 target specification
         shell: pwsh
         run: |
@@ -49,6 +48,33 @@ jobs:
           $spec = $spec -replace '"vendor"\s*:\s*"pc"', '"vendor": "win7"'
           Set-Content -Encoding utf8 target-win7.json $spec
           Get-Content target-win7.json
+
+      # glutin_wgl_sys 0.6.1 checks the TARGET triple text for the word
+      # "windows". Cargo names JSON targets after the JSON filename ("target-win7"),
+      # so that check skips generating WGL bindings. Use Cargo's target OS cfg instead.
+      - name: Patch WGL bindings generation for custom target
+        shell: pwsh
+        run: |
+          cargo fetch --locked
+          $crate = Get-ChildItem "$env:USERPROFILE\.cargo\registry\src" -Directory -Recurse -Filter "glutin_wgl_sys-0.6.1" |
+            Select-Object -First 1
+          if (!$crate) {
+            throw "glutin_wgl_sys 0.6.1 source was not downloaded."
+          }
+          $build = Join-Path $crate.FullName "build.rs"
+          $source = Get-Content $build -Raw
+          $old = 'let target = env::var("TARGET").unwrap();'
+          if (!$source.Contains($old)) {
+            throw "Unexpected glutin_wgl_sys build.rs: TARGET declaration not found."
+          }
+          $source = $source.Replace($old, '')
+          $oldCondition = 'if target.contains("windows") {'
+          if (!$source.Contains($oldCondition)) {
+            throw "Unexpected glutin_wgl_sys build.rs: Windows condition not found."
+          }
+          $source = $source.Replace($oldCondition, 'if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {')
+          Set-Content -Path $build -Value $source -NoNewline
+          Write-Host "Patched WGL generation to use CARGO_CFG_TARGET_OS."
 
       - name: Build Horizon client for Windows 7
         run: cargo build --locked --no-default-features -Z json-target-spec -Z build-std=std,panic_unwind --target target-win7.json --release -p horizon-client --bin horizon-client
