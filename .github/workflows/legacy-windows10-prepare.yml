@@ -1,0 +1,67 @@
+name: Windows 10 resource preparer
+
+on:
+  push:
+    branches: [legacy-windows7]
+    paths:
+      - ".github/workflows/legacy-windows10-prepare.yml"
+      - "crates/horizon-prepare/**"
+      - "research-lock.json"
+      - "mods/horizon/src/test/java/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: legacy-windows10-prepare-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows10-x64:
+    name: Build resource preparer for Windows 10 x64
+    runs-on: windows-2022
+    timeout-minutes: 90
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: horizon-prepare-windows10-x64
+
+      - name: Build horizon-prepare
+        run: cargo build --locked --release -p horizon-prepare --bin horizon-prepare
+
+      - name: Verify executable and assemble package
+        shell: pwsh
+        run: |
+          $package = "target/horizon-prepare-windows10-package"
+          New-Item -ItemType Directory -Force -Path $package | Out-Null
+          $exe = "target/release/horizon-prepare.exe"
+          if (!(Test-Path $exe)) {
+            throw "Build did not produce $exe"
+          }
+          Copy-Item $exe "$package/horizon-prepare.exe"
+          Copy-Item "research-lock.json" $package
+          New-Item -ItemType Directory -Force -Path "$package/mods/horizon/src/test/java" | Out-Null
+          Copy-Item "mods/horizon/src/test/java/*" "$package/mods/horizon/src/test/java" -Recurse
+          & "$package/horizon-prepare.exe" --launch-api
+          if ($LASTEXITCODE -ne 0) {
+            throw "horizon-prepare --launch-api failed"
+          }
+          Get-ChildItem $package -Recurse | Measure-Object -Property Length -Sum
+
+      - name: Upload Windows 10 resource preparer
+        uses: actions/upload-artifact@v4
+        with:
+          name: horizon-prepare-windows10-x64
+          path: target/horizon-prepare-windows10-package/**
+          if-no-files-found: error
+          retention-days: 7
