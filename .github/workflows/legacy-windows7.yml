@@ -16,28 +16,36 @@ jobs:
   windows7-x64:
     name: Build Windows 7 x64 compatibility test
     runs-on: windows-2022
-    timeout-minutes: 90
+    timeout-minutes: 120
     steps:
       - name: Check out source
         uses: actions/checkout@v4
 
-      - name: Install current stable Rust
-        uses: dtolnay/rust-toolchain@stable
+      # The ordinary *-pc-windows-msvc Rust target requires Windows 10.
+      # The dedicated win7 target supplies compatibility shims for APIs such
+      # as GetSystemTimePreciseAsFileTime, which is absent on Windows 7.
+      - name: Install nightly Rust and Rust sources
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: legacy-windows7-x64
+          shared-key: legacy-windows7-x64-win7-target
 
-      - name: Build Horizon client
-        run: cargo build --locked --release -p horizon-client --bin horizon-client
+      - name: Verify Windows 7 target is known
+        run: rustc --print target-list | findstr /x x86_64-win7-windows-msvc
+
+      - name: Build Horizon client for Windows 7
+        run: cargo build --locked -Z build-std=std,panic_unwind --target x86_64-win7-windows-msvc --release -p horizon-client --bin horizon-client
 
       - name: Assemble experimental package
         shell: pwsh
         run: |
           $package = "target/legacy-windows7-package"
           New-Item -ItemType Directory -Force -Path $package | Out-Null
-          $exe = "target/release/horizon-client.exe"
+          $exe = "target/x86_64-win7-windows-msvc/release/horizon-client.exe"
           if (!(Test-Path $exe)) {
             throw "Build did not produce $exe"
           }
