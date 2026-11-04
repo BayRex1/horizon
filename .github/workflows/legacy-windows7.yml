@@ -31,10 +31,7 @@ jobs:
         with:
           shared-key: legacy-windows7-x64-win7-target
 
-      # Rust keeps the Win7 target as Tier 3 and does not publish it in
-      # rustc --print target-list. Build a custom target spec based on the
-      # official x86_64 MSVC ABI, changing only the vendor to "win7".
-      # Rust std uses target_vendor="win7" to select Win7 API fallbacks.
+      # Build a custom Win7 target using the MSVC ABI and Win7 std fallbacks.
       - name: Create Windows 7 target specification
         shell: pwsh
         run: |
@@ -49,7 +46,7 @@ jobs:
           Get-Content target-win7.json
 
       - name: Build Horizon client for Windows 7
-        run: cargo build --locked -Z build-std=std,panic_unwind --target target-win7.json --release -p horizon-client --bin horizon-client
+        run: cargo build --locked -Z json-target-spec -Z build-std=std,panic_unwind --target target-win7.json --release -p horizon-client --bin horizon-client
 
       - name: Assemble experimental package
         shell: pwsh
